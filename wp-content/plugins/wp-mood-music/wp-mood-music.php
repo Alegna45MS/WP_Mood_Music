@@ -2,18 +2,20 @@
 /**
  * Plugin Name: WP Mood Music
  * Description: Reproduce música según la hora del día o el clima al hacer clic en botones.
- * Version: 1.3
+ * Version: 1.4
  * Author: Ángela
  */
 
 // Shortcodes
-function wpmood_music_buttons_shortcode() {
-    return '
-        <button id="wpmood-button-time">🎵 Música por hora</button>
-        <button id="wpmood-button-weather">🌦️ Música por clima</button>
-    ';
+function wpmood_music_button_time() {
+    return '<button id="wpmood-button-time">🎵 Música por hora</button>';
 }
-add_shortcode('mood_music_button', 'wpmood_music_buttons_shortcode');
+function wpmood_music_button_weather(){
+    return '<button id="wpmood-button-weather">🌦️ Música por clima</button>';
+
+}
+add_shortcode('mood_music_button_time', 'wpmood_music_button_time');
+add_shortcode('mood_music_button_weather', 'wpmood_music_button_weather');
 
 // Script 
 function wpmoodmusic_cargar_script() {
@@ -35,73 +37,122 @@ function wpmoodmusic_cargar_script() {
 
     $api_key = get_option('moodmusic_api_key');
     ?>
+    <style>
+    /* Estilo para los botones de WP Mood Music */
+    #wpmood-button-time,
+    #wpmood-button-weather {
+        background-color: #0073aa; /* Azul de WP */
+        color: white;
+        border: none;
+        padding: 10px 18px;
+        margin: 5px 10px 5px 0;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 16px;
+        font-weight: 600;
+        transition: background-color 0.3s ease;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    #wpmood-button-time:hover,
+    #wpmood-button-weather:hover {
+        background-color: #005177; /* Azul más oscuro al pasar el ratón */
+    }
+
+    #wpmood-button-time:focus,
+    #wpmood-button-weather:focus {
+        outline: 2px solid #80bfff; /* foco accesible */
+        outline-offset: 2px;
+    }
+</style>
     <script>
-    document.addEventListener('DOMContentLoaded', function () {
-        const audioTiempo = <?php echo json_encode($audios_tiempo); ?>;
-        const audioClima = <?php echo json_encode($audios_clima); ?>;
-        const apiKey = "<?php echo $api_key; ?>";
+document.addEventListener('DOMContentLoaded', function () {
+    const audioTiempo = <?php echo json_encode($audios_tiempo); ?>;
+    const audioClima = <?php echo json_encode($audios_clima); ?>;
+    const apiKey = "<?php echo $api_key; ?>";
 
-        const buttonTime = document.getElementById('wpmood-button-time');
-        const buttonWeather = document.getElementById('wpmood-button-weather');
+    const buttonTime = document.getElementById('wpmood-button-time');
+    const buttonWeather = document.getElementById('wpmood-button-weather');
 
-        if (buttonTime) {
-            buttonTime.addEventListener('click', function () {
-                const hour = new Date().getHours();
-                let audioURL = '';
+    let currentAudio = null;
 
-                if (hour >= 6 && hour < 12) {
-                    audioURL = audioTiempo.morning;
-                } else if (hour >= 12 && hour < 18) {
-                    audioURL = audioTiempo.afternoon;
-                } else if (hour >= 18 && hour < 22) {
-                    audioURL = audioTiempo.evening;
-                } else {
-                    audioURL = audioTiempo.night;
-                }
-
-                if (audioURL) {
-                    const audio = new Audio(audioURL);
-                    audio.loop = true;
-                    audio.play().catch(err => console.error("Error:", err));
-                }
-            });
+    function reproducirAudio(url) {
+        if (currentAudio) {
+            currentAudio.pause();
+            currentAudio.currentTime = 0;
         }
 
-        if (buttonWeather) {
-            buttonWeather.addEventListener('click', function () {
-                if (!navigator.geolocation) {
-                    alert("La geolocalización no está disponible.");
-                    return;
-                }
+        currentAudio = new Audio(url);
+        currentAudio.loop = true;
+        currentAudio.play().catch(err => console.error("Error al reproducir:", err));
+    }
 
-                navigator.geolocation.getCurrentPosition(function (position) {
-                    const lat = position.coords.latitude;
-                    const lon = position.coords.longitude;
+    if (buttonTime) {
+        buttonTime.addEventListener('click', function () {
+            const hour = new Date().getHours();
+            let audioURL = '';
 
-                    fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&units=metric&lang=es&appid=${apiKey}`)
-                        .then(res => res.json())
-                        .then(data => {
-                            const main = data.weather[0].main;
-                            const audioURL = audioClima[main];
+            if (hour >= 6 && hour < 12) {
+                audioURL = audioTiempo.morning;
+            } else if (hour >= 12 && hour < 18) {
+                audioURL = audioTiempo.afternoon;
+            } else if (hour >= 18 && hour < 22) {
+                audioURL = audioTiempo.evening;
+            } else {
+                audioURL = audioTiempo.night;
+            }
 
-                            if (audioURL) {
-                                const audio = new Audio(audioURL);
-                                audio.loop = true;
-                                audio.play().catch(err => console.error("Error:", err));
-                            } else {
-                                alert("No hay música asignada para este clima: " + main);
-                            }
-                        }).catch(err => {
-                            console.error("Error al obtener el clima:", err);
-                        });
-                }, function (err) {
-                    console.error("Error en geolocalización:", err);
-                    alert("No se pudo obtener la ubicación.");
-                });
+            if (audioURL) {
+                reproducirAudio(audioURL);
+            } else {
+                alert("No hay audio configurado para esta hora.");
+            }
+        });
+    }
+
+    if (buttonWeather) {
+        buttonWeather.addEventListener('click', function () {
+        if (!navigator.geolocation) {
+            alert("La geolocalización no está disponible. Usando Madrid por defecto.");
+            usarClimaPorDefecto();
+        } else {
+            navigator.geolocation.getCurrentPosition(function (position) {
+                const lat = position.coords.latitude;
+                const lon = position.coords.longitude;
+                obtenerClimaYReproducir(lat, lon);
+            }, function (err) {
+                console.error("Error en geolocalización:", err);
+                alert("No se pudo obtener la ubicación. Usando Madrid por defecto.");
+                usarClimaPorDefecto();
             });
         }
     });
-    </script>
+}
+
+function usarClimaPorDefecto() {
+    const latMadrid = 40.4168;
+    const lonMadrid = -3.7038;
+    obtenerClimaYReproducir(latMadrid, lonMadrid);
+}
+
+function obtenerClimaYReproducir(lat, lon) {
+    fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&units=metric&lang=es&appid=${apiKey}`)
+        .then(res => res.json())
+        .then(data => {
+            const main = data.weather[0].main;
+            const audioURL = audioClima[main];
+
+            if (audioURL) {
+                reproducirAudio(audioURL);
+            } else {
+                alert("No hay música asignada para este clima: " + main);
+            }
+        }).catch(err => {
+            console.error("Error al obtener el clima:", err);
+        });
+}
+});
+</script>
     <?php
 }
 add_action('wp_head', 'wpmoodmusic_cargar_script');
@@ -150,8 +201,40 @@ function moodmusic_pagina_ajustes() {
     }
 
     ?>
+    <style>
+    .moodmusic-instrucciones {
+        background-color: #f0f8ff; /* azul clarito */
+        border-left: 4px solid #0073aa; /* azul WP admin */
+        padding: 15px 20px;
+        margin-bottom: 20px;
+        font-family: Arial, sans-serif;
+        color: #333;
+        line-height: 1.5;
+        border-radius: 4px;
+    }
+    .moodmusic-instrucciones ul {
+        margin-top: 8px;
+        margin-left: 20px;
+    }
+    .moodmusic-instrucciones strong {
+        color: #0073aa;
+    }
+</style>
     <div class="wrap">
         <h1>Configuración de Mood Music</h1>
+        <div class="moodmusic-instrucciones">
+    Bienvenido a la configuración de <strong>WP Mood Music</strong>. Aquí puedes subir los archivos de audio que se reproducirán según la hora del día o el clima actual.
+    <br>
+    <strong>Cómo usar el plugin:</strong>
+    <ul>
+        <li>Sube un archivo de audio para cada tramo horario (mañana, tarde, noche y madrugada).</li>
+        <li>Introduce tu API Key de OpenWeatherMap para que el plugin pueda obtener el clima actual.</li>
+        <li>Sube un archivo de audio para cada tipo de clima que quieras soportar (despejado, nublado, lluvia, etc.).</li>
+        <li>Luego, en tus páginas o entradas, inserta los shortcodes <code>[mood_music_button_time]</code> para reproducir música según la hora, o <code>[mood_music_button_weather]</code> para reproducir música según el clima.</li>
+        <li>Al pulsar los botones en el frontend se reproducirá la música correspondiente.</li>
+    </ul>
+    ¡Disfruta de la música adaptada a tu estado de ánimo y entorno!
+</div>
         <form method="post" enctype="multipart/form-data">
             
             <h2>Música por hora del día</h2>
